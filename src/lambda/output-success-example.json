@@ -1,0 +1,11 @@
+{
+  "statusCode": 201,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "POST,OPTIONS"
+  },
+  "body": "{\"id\":\"550e8400-e29b-41d4-a716-446655440000\",\"cuit\":\"20333444555\",\"businessName\":\"Tech Solutions SA\",\"companyType\":\"sme\",\"adhesionDate\":\"2025-11-14\",\"createdAt\":\"2025-11-14T21:30:00.000Z\",\"updatedAt\":\"2025-11-14T21:30:00.000Z\"}"
+}
+

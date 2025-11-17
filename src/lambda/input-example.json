@@ -1,0 +1,12 @@
+{
+  "resource": "/companies/adhesion",
+  "path": "/companies/adhesion",
+  "httpMethod": "POST",
+  "headers": {
+    "Authorization": "Bearer asdasdsafd",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"cuit\":\"20333444555\",\"businessName\":\"Tech Solutions SA\",\"companyType\":\"sme\",\"adhesionDate\":\"2025-11-14\"}",
+  "isBase64Encoded": false
+}
+

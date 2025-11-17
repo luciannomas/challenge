@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Deployment package
+function.zip
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+

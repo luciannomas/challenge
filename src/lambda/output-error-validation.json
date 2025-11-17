@@ -1,0 +1,11 @@
+{
+  "statusCode": 400,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "POST,OPTIONS"
+  },
+  "body": "{\"statusCode\":400,\"message\":[\"CUIT must be 11 digits\",\"Business name must be between 3 and 100 characters\"],\"error\":\"Bad Request\"}"
+}
+
