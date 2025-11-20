@@ -6,6 +6,7 @@ import { CompanyAdhesionResponseDto } from '../dto/company-adhesion-response.dto
 import { PaginatedTransfersResponseDto } from '../dto/paginated-transfers-response.dto';
 import { PaginatedCompaniesJoinedResponseDto } from '../dto/paginated-companies-joined-response.dto';
 import { TimezoneInterceptor } from '../../common/interceptors/timezone.interceptor';
+import { ErrorExamples } from '../../common/dto/error-response.dto';
 
 @ApiTags('Companies')
 @Controller('companies')
@@ -35,37 +36,10 @@ export class CompaniesController {
       adhesionDate: '2025-11-14T18:30:00-03:00',
     },
   })
-  @ApiResponse({ 
-    status: 400, 
-    description: 'Bad Request - Invalid data',
-    example: {
-      statusCode: 400,
-      message: [
-        'CUIT must be 11 digits',
-        'Business name must be at least 3 characters long',
-        'Adhesion date must be in format YYYY-MM-DD (e.g., 2025-11-13)',
-      ],
-      error: 'Bad Request',
-    },
-  })
-  @ApiResponse({ 
-    status: 401, 
-    description: 'Unauthorized - Invalid or missing Bearer token',
-    example: {
-      statusCode: 401,
-      message: 'Invalid authentication token',
-      error: 'Unauthorized',
-    },
-  })
-  @ApiResponse({ 
-    status: 409, 
-    description: 'Conflict - CUIT already exists',
-    example: {
-      statusCode: 409,
-      message: 'Company with CUIT 20333444555 already exists',
-      error: 'Conflict',
-    },
-  })
+  @ApiResponse({ status: 400, ...ErrorExamples.BadRequest })
+  @ApiResponse({ status: 401, ...ErrorExamples.Unauthorized })
+  @ApiResponse({ status: 409, ...ErrorExamples.Conflict })
+  @ApiResponse({ status: 500, ...ErrorExamples.InternalServerError })
   async registerCompany(@Body() createCompanyDto: CreateCompanyDto): Promise<CompanyAdhesionResponseDto> {
     this.logger.log(`[Companies-Controller]: POST /companies/adhesion - Registering new company (authenticated)`);
     
@@ -129,15 +103,9 @@ export class CompaniesController {
       },
     },
   })
-  @ApiResponse({ 
-    status: 429, 
-    description: 'Too Many Requests - Rate limit exceeded',
-    example: {
-      statusCode: 429,
-      message: 'Acceso denegado. Volver a intentar en 10 segundos',
-      error: 'Too Many Requests',
-    },
-  })
+  @ApiResponse({ status: 400, ...ErrorExamples.BadRequest })
+  @ApiResponse({ status: 429, ...ErrorExamples.TooManyRequests })
+  @ApiResponse({ status: 500, ...ErrorExamples.InternalServerError })
   async getCompaniesWithTransfersLastMonth(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -215,15 +183,9 @@ export class CompaniesController {
       },
     },
   })
-  @ApiResponse({ 
-    status: 429, 
-    description: 'Too Many Requests - Rate limit exceeded',
-    example: {
-      statusCode: 429,
-      message: 'Acceso denegado. Volver a intentar en 10 segundos',
-      error: 'Too Many Requests',
-    },
-  })
+  @ApiResponse({ status: 400, ...ErrorExamples.BadRequest })
+  @ApiResponse({ status: 429, ...ErrorExamples.TooManyRequests })
+  @ApiResponse({ status: 500, ...ErrorExamples.InternalServerError })
   async getCompaniesJoinedLastMonth(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

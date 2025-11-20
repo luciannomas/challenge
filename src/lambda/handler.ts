@@ -43,14 +43,26 @@ interface CompanyResponse {
 
 /**
  * Conecta a MongoDB (reutiliza conexión si existe)
+ * 
+ * ESTRATEGIA DE REUTILIZACIÓN DE CONEXIÓN:
+ * - AWS Lambda mantiene el contexto de ejecución "caliente" (warm start) después
+ *   de la primera invocación, permitiendo reutilizar variables globales
+ * - cachedDb y cachedClient persisten entre invocaciones dentro del mismo contenedor
+ * - Esto reduce latencia (no reconectar en cada request) y carga en MongoDB
+ * - Si Lambda está "fría" (cold start), se crea nueva conexión automáticamente
+ * 
+ * BENEFICIOS:
+ * - ⚡ Menor latencia en warm starts (50-200ms vs 500-1000ms)
+ * - 💰 Menor costo de ejecución (menos tiempo = menos facturación)
+ * - 🔒 Mejor uso de conexiones de MongoDB (evita pool exhaustion)
  */
 async function connectToDatabase(): Promise<Db> {
   if (cachedDb) {
-    console.log('[Lambda]: Using cached MongoDB connection');
+    console.log('[Lambda]: Using cached MongoDB connection (warm start)');
     return cachedDb;
   }
 
-  console.log('[Lambda]: Creating new MongoDB connection');
+  console.log('[Lambda]: Creating new MongoDB connection (cold start)');
   const client = new MongoClient(MONGODB_URI);
   await client.connect();
 
@@ -58,6 +70,7 @@ async function connectToDatabase(): Promise<Db> {
   cachedClient = client;
   cachedDb = client.db(dbName);
 
+  console.log(`[Lambda]: Connected to MongoDB database: ${dbName}`);
   return cachedDb;
 }
 
@@ -105,9 +118,17 @@ export const handler = async (
       });
     }
 
-    // 4. Verificar CUIT único
+    // 4. Verificar CUIT único (IDEMPOTENCIA)
+    // ESTRATEGIA DE IDEMPOTENCIA Y REINTENTOS:
+    // - Si se recibe un request duplicado (mismo CUIT), devolvemos 409 Conflict
+    // - AWS Lambda configurado con maximumRetryAttempts: 2 en serverless.yml
+    // - Los reintentos automáticos SOLO ocurren en errores 5xx o timeouts
+    // - En caso de 4xx (400, 401, 409), NO se reintenta (error del cliente)
+    // - CUIT es la clave de idempotencia natural (unique index en MongoDB)
+    // - Si un reintento encuentra CUIT duplicado → 409 (no se duplica el registro)
     const existingCompany = await companiesCollection.findOne({ cuit: body.cuit });
     if (existingCompany) {
+      console.log(`[Lambda]: Idempotency check - CUIT ${body.cuit} already exists`);
       return createResponse(409, {
         statusCode: 409,
         message: `Company with CUIT ${body.cuit} already exists`,

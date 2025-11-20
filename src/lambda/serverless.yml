@@ -1,0 +1,98 @@
+service: interbanking-company-adhesion
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+  
+  # Variables de entorno para la función Lambda
+  environment:
+    MONGODB_URI: ${env:MONGODB_URI}
+    AUTH_TOKEN: ${env:AUTH_TOKEN}
+    NODE_ENV: ${self:provider.stage}
+  
+  # Logs de CloudWatch
+  logs:
+    restApi: true
+  
+  # IAM Role Statements (si necesitas acceso a otros servicios AWS)
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: 
+        - 'arn:aws:logs:*:*:*'
+
+functions:
+  companyAdhesion:
+    handler: handler.handler
+    description: Register new company adhesion
+    events:
+      - http:
+          path: /adhesion
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+    
+    # Configuración de reintentos (para manejar errores transitorios)
+    maximumRetryAttempts: 2
+    
+    # Reserved concurrency (para controlar rate limiting)
+    reservedConcurrency: 10
+    
+    # Variables de entorno específicas de la función (opcional)
+    environment:
+      LOG_LEVEL: info
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+# Configuración adicional
+custom:
+  # Para desarrollo local con serverless-offline
+  serverless-offline:
+    httpPort: 4000
+  
+  # Cargar variables desde .env
+  dotenv:
+    path: ../../.env
+    include:
+      - MONGODB_URI
+      - AUTH_TOKEN
+
+# Recursos adicionales de AWS (opcional)
+resources:
+  Resources:
+    # CloudWatch Log Group con retención configurada
+    CompanyAdhesionLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-companyAdhesion
+        RetentionInDays: 14
+
+# Package configuration
+package:
+  individually: false
+  exclude:
+    - node_modules/**
+    - .git/**
+    - .env
+    - README.md
+    - input-example.json
+    - output-*.json
+  include:
+    - handler.js
+    - package.json
+

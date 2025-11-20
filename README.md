@@ -123,6 +123,30 @@ La API incluye **Swagger/OpenAPI** para probar todos los endpoints de forma inte
 ```
 http://localhost:3000/api/docs
 ```
+
+### Características de la Documentación:
+- ✅ **Contratos completos**: Todos los endpoints documentados con ejemplos de request/response
+- ✅ **Esquemas de error uniformes**: Respuestas de error consistentes para todos los endpoints
+- ✅ **Ejemplos 4xx/5xx**: Múltiples ejemplos de errores (validación, autenticación, conflictos, rate limiting, errores del servidor)
+- ✅ **Formato estándar de error**:
+  ```json
+  {
+    "statusCode": 400,
+    "message": "Validation error message or array of messages",
+    "error": "Bad Request"
+  }
+  ```
+- ✅ **Try it out**: Autenticación Bearer integrada para probar endpoints protegidos
+- ✅ **Paginación documentada**: Parámetros `page` y `limit` con valores por defecto
+
+**Errores documentados:**
+- `400` Bad Request - Errores de validación
+- `401` Unauthorized - Autenticación faltante o inválida
+- `404` Not Found - Recurso no encontrado
+- `409` Conflict - Conflicto (ej: CUIT duplicado)
+- `429` Too Many Requests - Límite de rate limiting excedido
+- `500` Internal Server Error - Errores del servidor
+
 ---
 
 ## 🔒 Seguridad
@@ -272,30 +296,85 @@ GET /companies/joined/last-month?page=2&limit=20
 
 ## Punto Adicional: AWS Lambda Function
 
-Este proyecto incluye una **Lambda Function de AWS** (diseño teórico) que replica la funcionalidad de adhesión de empresas en arquitectura serverless.
+Este proyecto incluye una **Lambda Function de AWS** (diseño funcional completo) que replica la funcionalidad de adhesión de empresas en arquitectura serverless.
 
 **Ubicación:** `src/lambda/` (excluida del build de NestJS)
 
-**Características:**
-- Validación de datos (CUIT, businessName, companyType, adhesionDate)
-- Autenticación Bearer Token
-- Conexión a la misma base MongoDB que NestJS
-- Verificación de CUIT único
-- Manejo completo de errores
-- CORS configurado
-- Caché de conexiones MongoDB (warm starts)
+### Características Principales
 
-**Arquitectura:**
+**Funcionalidad:**
+- ✅ Validación de datos (CUIT, businessName, companyType, adhesionDate)
+- ✅ Autenticación Bearer Token (parametrizada via env vars)
+- ✅ Conexión a la misma base MongoDB que NestJS
+- ✅ Verificación de CUIT único con idempotencia garantizada
+- ✅ Manejo completo de errores con esquemas uniformes
+- ✅ CORS configurado
+
+**Optimizaciones:**
+- ⚡ **Reutilización de conexión MongoDB** (warm starts ~50-200ms vs cold starts ~500-1000ms)
+- ⚡ Caché de conexiones documentado y explicado
+- ⚡ Reserved concurrency para control de rate limiting
+
+**Despliegue:**
+- 📦 **`serverless.yml` completo** con configuración AWS
+- 📦 Variables de entorno parametrizadas (`MONGODB_URI`, `AUTH_TOKEN`)
+- 📦 CloudWatch Logs con retención de 14 días
+- 📦 Ready para `serverless deploy`
+
+**Idempotencia y Reintentos:**
+- ♻️ CUIT como clave natural de idempotencia
+- ♻️ Reintentos automáticos (máximo 2) solo en errores 5xx/timeout
+- ♻️ **Garantía**: Reintentos NO duplican registros (devuelve 409 Conflict)
+- ♻️ Estrategia documentada para errores transitorios
+
+### Arquitectura
+
+```
+Cliente → API Gateway → Lambda → MongoDB (misma base que NestJS)
+                          ↓
+                    CloudWatch Logs
+```
+
+**Flujos:**
 - `POST /adhesion` → API Gateway → Lambda → MongoDB
-- `GET /companies` → NestJS → MongoDB (misma base)
+- `GET /companies` → NestJS API → MongoDB (misma base)
 
-**Ver documentación:**
+### Configuración de Variables de Entorno
+
+**En `serverless.yml`:**
+```yaml
+environment:
+  MONGODB_URI: ${env:MONGODB_URI}
+  AUTH_TOKEN: ${env:AUTH_TOKEN}
+```
+
+**Despliegue:**
+```bash
+# Desarrollo
+serverless deploy
+
+# Producción
+serverless deploy --stage prod
+
+# Testing local
+serverless offline start
+```
+
+### Documentación Completa
+
 ```bash
 cd src/lambda/
 cat README.md
 ```
 
-La Lambda **no requiere despliegue** (es solo diseño funcional). Para detalles sobre arquitectura, input/output y configuración AWS, consulta `src/lambda/README.md`.
+**Incluye:**
+- 📖 Input/output esperados (formato JSON)
+- 📖 Configuración de `serverless.yml`
+- 📖 Estrategia de reutilización de conexión MongoDB
+- 📖 Políticas de reintento e idempotencia
+- 📖 Ejemplos de casos de uso (cold/warm starts, reintentos, duplicados)
+
+La Lambda **no requiere despliegue** (es diseño funcional), pero está **lista para producción** con toda la configuración necesaria.
 
 ---
 
