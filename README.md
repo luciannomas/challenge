@@ -80,14 +80,16 @@ challenge/
 npm install
 ```
 
-#### 2. Configurar variables de entorno (opcional)
+#### 2. Configurar variables de entorno
 ```bash
 # Copiar el archivo de ejemplo
 cp .env.example .env
 
-# Las variables por defecto funcionan para desarrollo local
+# Editar .env con tus valores (o usar los valores por defecto)
 # MONGODB_URI=mongodb://localhost:27017/interbanking
-# AUTH_TOKEN=asdasdsafd (para Lambda)
+# AUTH_TOKEN=Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bD
+# PORT=3000
+# CORS_ORIGIN=*
 ```
 
 #### 3. Iniciar MongoDB
@@ -121,6 +123,75 @@ La API incluye **Swagger/OpenAPI** para probar todos los endpoints de forma inte
 ```
 http://localhost:3000/api/docs
 ```
+---
+
+## 🔒 Seguridad
+
+### Autenticación
+- **Bearer Token**: Todas las rutas de adhesión requieren autenticación mediante token Bearer
+- Token configurado en variable de entorno `AUTH_TOKEN` (ver `.env.example`)
+- Formato: `Authorization: Bearer <token>`
+- **No hay tokens hardcodeados en el código** - todo se maneja mediante `process.env`
+
+### Protecciones Implementadas
+- ✅ **Helmet**: Headers HTTP seguros (XSS, clickjacking, MIME sniffing)
+- ✅ **CORS**: Control de orígenes permitidos (configurable via `CORS_ORIGIN`)
+- ✅ **Rate Limiting**: Protección contra sobrecarga (in-memory)
+  - 5 requests cada 30 segundos por IP
+  - Bloqueo de 40 segundos al exceder límite
+  - Rutas protegidas: GET `/companies/with-transfers/last-month` y `/companies/joined/last-month`
+- ✅ **Validación Estricta**: DTOs con `class-validator` y `whitelist: true`
+- ✅ **Paginación**: Límites en consultas GET para prevenir consultas pesadas
+
+### Rate Limiting - Producción
+
+**📌 Implementación Actual (Challenge):**
+
+El middleware in-memory actual es **correcto para el challenge**, pero tiene limitaciones en producción:
+- ✓ Simple y efectivo para desarrollo
+- ✗ No escala en clusters o múltiples instancias
+- ✗ Se pierde el estado en cada restart
+- ✗ **No expone headers de cuota** (`X-RateLimit-*`)
+
+---
+
+**🚀 Opciones de Reemplazo para Producción:**
+
+#### Opción 1: `@nestjs/throttler` con Redis (Recomendado)
+
+```bash
+npm install @nestjs/throttler @nestjs/throttler-storage-redis ioredis
+```
+
+**Ventajas:**
+- ✓ **Comparte estado entre instancias** (cluster/múltiples servidores)
+- ✓ **Persistencia de límites** en Redis
+- ✓ **Headers de cuota automáticos**:
+  - `X-RateLimit-Limit`: Límite de requests permitidos
+  - `X-RateLimit-Remaining`: Requests restantes en ventana actual
+  - `X-RateLimit-Reset`: Timestamp de reinicio de ventana
+
+**Ejemplo de configuración:**
+```typescript
+// app.module.ts
+ThrottlerModule.forRoot([{
+  ttl: 30000,  // 30 segundos
+  limit: 5,    // 5 requests
+  storage: new ThrottlerStorageRedisService(new Redis({ /* config */ })),
+}])
+```
+
+---
+
+#### Opción 2: API Gateway / Load Balancer
+
+**Alternativas de infraestructura:**
+- **AWS API Gateway**: Burst/rate limits nativos, sin código
+- **NGINX**: Módulo `limit_req_zone` para rate limiting
+- **Cloudflare**: Rate Limiting con reglas configurables
+
+**Ventaja:** Se maneja a nivel de infraestructura, sin cambios en el código
+
 ---
 
 ## Tests
@@ -157,10 +228,16 @@ npm test -- common/middleware/auth.middleware.spec
 ### Middleware de Autenticación
 - **Ruta protegida**: `POST /companies/adhesion`
 - **Propósito**: Validar que solo usuarios autorizados puedan registrar empresas
-- **Token requerido**: `asdasdsafd` (mock para testing)
-- **Header**: `Authorization: Bearer asdasdsafd`
+- **Token**: Configurado via variable de entorno `AUTH_TOKEN`
+- **Header**: `Authorization: Bearer <token>`
 
 Este sistema de validación es común en operaciones sensibles como adhesión de empresas.
+
+**Configuración:**
+```bash
+# En .env
+AUTH_TOKEN=Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bD
+```
 
 ### Middleware de Rate Limiting
 - **Rutas protegidas**: 
@@ -168,7 +245,8 @@ Este sistema de validación es común en operaciones sensibles como adhesión de
   - `GET /companies/joined/last-month`
 - **Propósito**: Evitar sobrecarga del servidor por exceso de consultas
 - **Límite**: Máximo 5 requests cada 30 segundos por IP
-- **Bloqueo**: 10 segundos si se excede el límite
+- **Bloqueo**: 40 segundos si se excede el límite
+- **Implementación**: In-memory (ver sección de Seguridad para opciones productivas)
 
 ---
 

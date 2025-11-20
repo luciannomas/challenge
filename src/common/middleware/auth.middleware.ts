@@ -1,13 +1,21 @@
 import { Injectable, NestMiddleware, UnauthorizedException, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
   private readonly logger = new Logger(AuthMiddleware.name);
-  private readonly VALID_TOKEN = 'asdasdsafd'; // Mock token for authentication
+
+  constructor(private readonly configService: ConfigService) {}
 
   use(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers.authorization;
+    const validToken = this.configService.get<string>('AUTH_TOKEN');
+
+    if (!validToken) {
+      this.logger.error('[Auth-Middleware]: AUTH_TOKEN not configured in environment variables');
+      throw new UnauthorizedException('Authentication service unavailable');
+    }
 
     this.logger.log(`[Auth-Middleware]: Validating authentication for ${req.method} ${req.path}`);
 
@@ -16,7 +24,7 @@ export class AuthMiddleware implements NestMiddleware {
       throw new UnauthorizedException('Authorization header is required');
     }
 
-    // Expected format: "Bearer asdasdsafd"
+    // Expected format: "Bearer <token>"
     const [bearer, token] = authHeader.split(' ');
 
     if (bearer !== 'Bearer') {
@@ -29,7 +37,7 @@ export class AuthMiddleware implements NestMiddleware {
       throw new UnauthorizedException('Token is required');
     }
 
-    if (token !== this.VALID_TOKEN) {
+    if (token !== validToken) {
       this.logger.warn(`[Auth-Middleware]: Invalid token provided: ${token.substring(0, 5)}...`);
       throw new UnauthorizedException('Invalid authentication token');
     }

@@ -1,15 +1,25 @@
 import { AuthMiddleware } from '../../../src/common/middleware/auth.middleware';
 import { UnauthorizedException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { ConfigService } from '@nestjs/config';
 
 describe('AuthMiddleware', () => {
   let middleware: AuthMiddleware;
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
   let mockNext: NextFunction;
+  let mockConfigService: Partial<ConfigService>;
+
+  const VALID_TOKEN = 'Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bD';
 
   beforeEach(() => {
-    middleware = new AuthMiddleware();
+    mockConfigService = {
+      get: jest.fn((key: string) => {
+        if (key === 'AUTH_TOKEN') return VALID_TOKEN;
+        return undefined;
+      }),
+    };
+    middleware = new AuthMiddleware(mockConfigService as ConfigService);
     mockRequest = {
       headers: {},
       method: 'POST',
@@ -22,7 +32,7 @@ describe('AuthMiddleware', () => {
   describe('Valid Authentication', () => {
     it('should call next() with valid Bearer token', () => {
       mockRequest.headers = {
-        authorization: 'Bearer asdasdsafd',
+        authorization: `Bearer ${VALID_TOKEN}`,
       };
 
       middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
@@ -32,7 +42,7 @@ describe('AuthMiddleware', () => {
 
     it('should not throw exception with valid token', () => {
       mockRequest.headers = {
-        authorization: 'Bearer asdasdsafd',
+        authorization: `Bearer ${VALID_TOKEN}`,
       };
 
       expect(() => {
@@ -42,7 +52,7 @@ describe('AuthMiddleware', () => {
 
     it('should handle Bearer with correct token', () => {
       mockRequest.headers = {
-        authorization: 'Bearer asdasdsafd',
+        authorization: `Bearer ${VALID_TOKEN}`,
       };
 
       middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
@@ -84,7 +94,7 @@ describe('AuthMiddleware', () => {
   describe('Invalid Authorization Format', () => {
     it('should throw when format is not "Bearer <token>"', () => {
       mockRequest.headers = {
-        authorization: 'Basic asdasdsafd',
+        authorization: `Basic ${VALID_TOKEN}`,
       };
 
       expect(() => {
@@ -94,7 +104,7 @@ describe('AuthMiddleware', () => {
 
     it('should throw when bearer keyword is missing', () => {
       mockRequest.headers = {
-        authorization: 'asdasdsafd',
+        authorization: VALID_TOKEN,
       };
 
       expect(() => {
@@ -104,7 +114,7 @@ describe('AuthMiddleware', () => {
 
     it('should throw when format has wrong structure', () => {
       mockRequest.headers = {
-        authorization: 'Token asdasdsafd',
+        authorization: `Token ${VALID_TOKEN}`,
       };
 
       expect(() => {
@@ -114,7 +124,7 @@ describe('AuthMiddleware', () => {
 
     it('should not call next() with invalid format', () => {
       mockRequest.headers = {
-        authorization: 'Basic asdasdsafd',
+        authorization: `Basic ${VALID_TOKEN}`,
       };
 
       try {
@@ -200,9 +210,9 @@ describe('AuthMiddleware', () => {
 
     it('should reject similar but incorrect tokens', () => {
       const invalidTokens = [
-        'asdasdsaf',     // Missing last character
-        'asdasdsafdd',   // Extra characters
-        'ASDASDSAFD',    // Wrong case
+        'Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0b',     // Missing last character
+        'Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bDD',   // Extra characters
+        'BEARER_MK7PL9XR4TN2WQ8VZ3JH6YF5SA1CE0BD',    // Wrong case
       ];
 
       invalidTokens.forEach(token => {
@@ -220,7 +230,7 @@ describe('AuthMiddleware', () => {
   describe('Case Sensitivity', () => {
     it('should be case-sensitive for Bearer keyword', () => {
       mockRequest.headers = {
-        authorization: 'bearer asdasdsafd',
+        authorization: `bearer ${VALID_TOKEN}`,
       };
 
       expect(() => {
@@ -230,7 +240,7 @@ describe('AuthMiddleware', () => {
 
     it('should be case-sensitive for token', () => {
       mockRequest.headers = {
-        authorization: 'Bearer ASDASDSAFD',
+        authorization: 'Bearer BEARER_MK7PL9XR4TN2WQ8VZ3JH6YF5SA1CE0BD',
       };
 
       expect(() => {
@@ -242,7 +252,7 @@ describe('AuthMiddleware', () => {
   describe('Whitespace Handling', () => {
     it('should handle single space between Bearer and token', () => {
       mockRequest.headers = {
-        authorization: 'Bearer asdasdsafd',
+        authorization: `Bearer ${VALID_TOKEN}`,
       };
 
       middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
@@ -251,11 +261,11 @@ describe('AuthMiddleware', () => {
 
     it('should handle trailing whitespace (split removes it)', () => {
       mockRequest.headers = {
-        authorization: 'Bearer asdasdsafd ',
+        authorization: `Bearer ${VALID_TOKEN} `,
       };
 
-      // The split(' ') method separates into ["Bearer", "asdasdsafd", ""]
-      // So the token "asdasdsafd" is correctly extracted
+      // The split(' ') method separates into ["Bearer", "VALID_TOKEN", ""]
+      // So the token is correctly extracted
       mockNext = jest.fn();
       middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
       expect(mockNext).toHaveBeenCalled();
@@ -263,10 +273,10 @@ describe('AuthMiddleware', () => {
 
     it('should not accept multiple spaces between Bearer and token', () => {
       mockRequest.headers = {
-        authorization: 'Bearer  asdasdsafd',
+        authorization: `Bearer  ${VALID_TOKEN}`,
       };
 
-      // Split gives ["Bearer", "", "asdasdsafd"], token becomes "" (empty)
+      // Split gives ["Bearer", "", "VALID_TOKEN"], token becomes "" (empty)
       expect(() => {
         middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
       }).toThrow(UnauthorizedException);
@@ -274,10 +284,10 @@ describe('AuthMiddleware', () => {
 
     it('should not accept leading whitespace before Bearer', () => {
       mockRequest.headers = {
-        authorization: ' Bearer asdasdsafd',
+        authorization: ` Bearer ${VALID_TOKEN}`,
       };
 
-      // Split gives ["", "Bearer", "asdasdsafd"], bearer becomes "" (not "Bearer")
+      // Split gives ["", "Bearer", "VALID_TOKEN"], bearer becomes "" (not "Bearer")
       expect(() => {
         middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
       }).toThrow(UnauthorizedException);
@@ -291,7 +301,7 @@ describe('AuthMiddleware', () => {
       methods.forEach(method => {
         const testRequest: Partial<Request> = {
           headers: {
-            authorization: 'Bearer asdasdsafd',
+            authorization: `Bearer ${VALID_TOKEN}`,
           },
           method: method,
           path: '/companies/adhesion',
@@ -313,7 +323,7 @@ describe('AuthMiddleware', () => {
       paths.forEach(path => {
         const testRequest: Partial<Request> = {
           headers: {
-            authorization: 'Bearer asdasdsafd',
+            authorization: `Bearer ${VALID_TOKEN}`,
           },
           method: 'POST',
           path: path,
@@ -338,7 +348,7 @@ describe('AuthMiddleware', () => {
 
     it('should be reusable across multiple requests', () => {
       mockRequest.headers = {
-        authorization: 'Bearer asdasdsafd',
+        authorization: `Bearer ${VALID_TOKEN}`,
       };
 
       // First request
@@ -350,6 +360,34 @@ describe('AuthMiddleware', () => {
       const next2 = jest.fn();
       middleware.use(mockRequest as Request, mockResponse as Response, next2);
       expect(next2).toHaveBeenCalled();
+    });
+  });
+
+  describe('ConfigService Integration', () => {
+    it('should throw error when AUTH_TOKEN is not configured', () => {
+      const emptyConfigService = {
+        get: jest.fn(() => undefined),
+      };
+      const middlewareWithoutToken = new AuthMiddleware(emptyConfigService as any);
+      
+      mockRequest.headers = {
+        authorization: `Bearer ${VALID_TOKEN}`,
+      };
+
+      expect(() => {
+        middlewareWithoutToken.use(mockRequest as Request, mockResponse as Response, mockNext);
+      }).toThrow('Authentication service unavailable');
+    });
+
+    it('should use token from ConfigService', () => {
+      mockRequest.headers = {
+        authorization: `Bearer ${VALID_TOKEN}`,
+      };
+
+      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(mockConfigService.get).toHaveBeenCalledWith('AUTH_TOKEN');
+      expect(mockNext).toHaveBeenCalled();
     });
   });
 });

@@ -7,10 +7,14 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import * as moment from 'moment-timezone';
 import { TIMEZONE } from '../../src/common/constants/timezone.constant';
 
+// Set AUTH_TOKEN for tests
+process.env.AUTH_TOKEN = 'Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bD';
+
 describe('Companies Controller (e2e)', () => {
   let app: INestApplication;
   let connection: Connection;
   let testCompanyId: string;
+  const AUTH_TOKEN = process.env.AUTH_TOKEN;
 
   beforeAll(async () => {
     // Configure timezone
@@ -101,7 +105,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject invalid CUIT (not 11 digits)', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '123', // Invalid CUIT
             businessName: 'Test Company SA',
@@ -117,7 +121,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject businessName shorter than 3 characters', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333',
             businessName: 'AB', // Too short
@@ -133,7 +137,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject businessName longer than 100 characters', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333',
             businessName: 'A'.repeat(101), // Too long
@@ -149,7 +153,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject invalid companyType', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333',
             businessName: 'Test Company SA',
@@ -162,7 +166,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject invalid adhesionDate format', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333',
             businessName: 'Test Company SA',
@@ -178,7 +182,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject missing required fields', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333',
             // Missing businessName, companyType, adhesionDate
@@ -191,7 +195,7 @@ describe('Companies Controller (e2e)', () => {
       it('should create SME company successfully', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333',
             businessName: 'Test SME Company SA',
@@ -215,7 +219,7 @@ describe('Companies Controller (e2e)', () => {
       it('should create Corporate company successfully', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99222333444',
             businessName: 'Test Corporate Company SA',
@@ -235,7 +239,7 @@ describe('Companies Controller (e2e)', () => {
       it('should reject duplicate CUIT', () => {
         return request(app.getHttpServer())
           .post('/companies/adhesion')
-          .set('Authorization', 'Bearer asdasdsafd')
+          .set('Authorization', `Bearer ${AUTH_TOKEN}`)
           .send({
             cuit: '99111222333', // Already exists
             businessName: 'Another Company',
