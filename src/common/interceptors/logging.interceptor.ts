@@ -72,7 +72,7 @@ export class LoggingInterceptor implements NestInterceptor {
             JSON.stringify(logData),
           );
         },
-        error: (error) => {
+        error: () => {
           // Error logging is handled by HttpExceptionFilter
           // Just log a brief message here
           const duration = Date.now() - startTime;

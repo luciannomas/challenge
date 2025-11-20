@@ -6,7 +6,7 @@ import * as moment from 'moment-timezone';
 import { TIMEZONE } from './common/constants/timezone.constant';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-const helmet = require('helmet');
+import helmet from 'helmet';
 
 // Configure timezone to UTC-3 (America/Buenos_Aires - Argentina)
 moment.tz.setDefault(TIMEZONE.NAME);
