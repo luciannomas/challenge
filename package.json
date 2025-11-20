@@ -33,7 +33,8 @@
     "moment-timezone": "^0.6.0",
     "mongoose": "^8.0.3",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.2.1",
@@ -45,6 +46,7 @@
     "@types/moment-timezone": "^0.5.30",
     "@types/node": "^20.10.6",
     "@types/supertest": "^6.0.2",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
     "@typescript-eslint/parser": "^6.17.0",
     "eslint": "^8.56.0",
@@ -66,18 +68,28 @@
       "json",
       "ts"
     ],
-    "rootDir": "test",
-    "testRegex": ".*\\.spec\\.ts$",
+    "rootDir": ".",
+    "testMatch": [
+      "**/test/**/*.spec.ts"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
+    "transformIgnorePatterns": [
+      "node_modules/(?!uuid)"
     ],
-    "coverageDirectory": "../coverage",
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/main.ts",
+      "!src/lambda/**",
+      "!src/database/seed.ts",
+      "!src/**/*.interface.ts",
+      "!src/**/*.spec.ts"
+    ],
+    "coverageDirectory": "coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^src/(.*)$": "<rootDir>/../src/$1"
+      "^src/(.*)$": "<rootDir>/src/$1"
     },
     "testTimeout": 60000
   }

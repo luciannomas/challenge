@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { CompaniesModule } from '../../src/companies/companies.module';
 import { CompaniesController } from '../../src/companies/controllers/companies.controller';
 import { CompaniesService } from '../../src/companies/services/companies.service';
@@ -47,8 +48,12 @@ describe('CompaniesModule', () => {
 
   describe('Middleware configuration', () => {
     it('should configure AuthMiddleware for POST /companies/adhesion', () => {
-      // Test that middleware is applied
-      const middleware = new AuthMiddleware();
+      // Mock ConfigService for AuthMiddleware
+      const mockConfigService = {
+        get: jest.fn().mockReturnValue('Bearer_test_token'),
+      } as any;
+      
+      const middleware = new AuthMiddleware(mockConfigService);
       expect(middleware).toBeDefined();
       expect(middleware).toHaveProperty('use');
       expect(typeof middleware.use).toBe('function');

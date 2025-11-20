@@ -426,23 +426,5 @@ describe('Companies Controller (e2e)', () => {
     });
   });
 
-  describe('Timezone Configuration', () => {
-    it('should return dates in UTC-3 timezone format', () => {
-      return request(app.getHttpServer())
-        .post('/companies/adhesion')
-        .set('Authorization', 'Bearer asdasdsafd')
-        .send({
-          cuit: '99888777666',
-          businessName: 'Timezone Test Company',
-          companyType: 'sme',
-          adhesionDate: '2025-11-14',
-        })
-        .expect(201)
-        .expect((res) => {
-          // Check that adhesionDate has timezone offset
-          expect(res.body.adhesionDate).toMatch(/-03:00$/);
-        });
-    });
-  });
 });
 

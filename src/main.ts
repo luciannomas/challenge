@@ -4,6 +4,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as moment from 'moment-timezone';
 import { TIMEZONE } from './common/constants/timezone.constant';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 const helmet = require('helmet');
 
 // Configure timezone to UTC-3 (America/Buenos_Aires - Argentina)
@@ -22,6 +24,12 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
+
+  // Observability: Global Exception Filter with structured logging
+  app.useGlobalFilters(new HttpExceptionFilter());
+
+  // Observability: Global Logging Interceptor with requestId and duration
+  app.useGlobalInterceptors(new LoggingInterceptor());
   
   const currentTime = moment.tz(TIMEZONE.NAME);
   const offset = currentTime.format('Z'); // +/-HH:MM format
@@ -74,6 +82,8 @@ async function bootstrap() {
   logger.log(`[Interbanking-API]: Security - Helmet: ✓ Enabled`);
   logger.log(`[Interbanking-API]: Security - CORS: ✓ Enabled (origin: ${process.env.CORS_ORIGIN || '*'})`);
   logger.log(`[Interbanking-API]: Security - Rate Limiting: ✓ In-memory middleware active`);
+  logger.log(`[Interbanking-API]: Observability - Global Exception Filter: ✓ Enabled`);
+  logger.log(`[Interbanking-API]: Observability - Structured Logging (requestId, route, method, duration, status): ✓ Enabled`);
 }
 
 bootstrap();

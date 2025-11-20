@@ -1,5 +1,6 @@
 import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigModule } from '@nestjs/config';
 import { CompaniesController } from './controllers/companies.controller';
 import { CompaniesService } from './services/companies.service';
 import { Company, CompanySchema } from './schemas/company.schema';
@@ -9,6 +10,7 @@ import { RateLimitMiddleware } from '../common/middleware/rate-limit.middleware'
 
 @Module({
   imports: [
+    ConfigModule,
     MongooseModule.forFeature([
       { name: Company.name, schema: CompanySchema },
       { name: Transfer.name, schema: TransferSchema },

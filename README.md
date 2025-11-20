@@ -1,380 +1,345 @@
 # Interbanking API - Challenge
 
-## ¿Qué hace esta API?
+![CI Pipeline](https://github.com/luciannomas/challenge/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://img.shields.io/codecov/c/github/luciannomas/challenge)
+![Node Version](https://img.shields.io/badge/node-18.x-green)
+![NestJS](https://img.shields.io/badge/nestjs-10.3-red)
 
-Esta API permite:
-- Obtener empresas que realizaron transferencias en el último mes (con paginación)
-- Obtener empresas que se adhirieron en el último mes (con paginación)
-- Registrar la adhesión de nuevas empresas (Pyme o Corporativa)
+## Descripción
+
+API REST para gestión de empresas y transferencias interbancarias con NestJS y MongoDB.
+
+**Funcionalidades:**
+- Adhesión de empresas (Pyme/Corporativa) con autenticación Bearer
+- Consulta de empresas adheridas en el último mes (paginado)
+- Consulta de empresas con transferencias en el último mes (paginado)
+- Registro de transferencias interbancarias
+- Zona horaria: UTC-3 (Argentina)
 
 ---
 
 ## Stack Tecnológico
 
-- **Framework**: NestJS 10
-- **Lenguaje**: TypeScript 5
-- **Base de Datos**: MongoDB (local)
-- **ODM**: Mongoose
-- **Testing**: Jest (647 tests completos)
-- **Documentación**: Swagger/OpenAPI
+| Tecnología | Versión |
+|-----------|---------|
+| NestJS | 10.3 |
+| TypeScript | 5.3 |
+| MongoDB | 7.0 |
+| Node.js | 18.x |
+| Jest | 29.7 |
 
 ---
+
+## Instalación Rápida
+
+```bash
+# 1. Instalar dependencias
+npm install
+
+# 2. Configurar variables de entorno
+cp .env.example .env
+
+# 3. Iniciar MongoDB (en otra terminal)
+mongod
+
+# 4. Poblar datos de prueba
+npm run seed
+
+# 5. Iniciar aplicación
+npm run start:dev
+```
+
+**URL Base:** `http://localhost:3000`  
+**Swagger:** `http://localhost:3000/api/docs`
+
+---
+
+## Documentación Swagger
+
+Toda la API está documentada en **Swagger/OpenAPI** con ejemplos interactivos:
+
+```
+http://localhost:3000/api/docs
+```
+
+**Incluye:**
+- Contratos completos de request/response
+- Esquemas de error uniformes (`{ statusCode, message, error }`)
+- Ejemplos de errores 4xx/5xx
+- Autenticación Bearer integrada
+- Try it out para todos los endpoints
+
+---
+
+## Mejoras Implementadas
+
+### 1. Auth & Seguridad ✅
+
+**Token no hardcodeado:**
+- Token movido a `process.env.AUTH_TOKEN`
+- Configuración via `.env` y documentado en `.env.example`
+- `ConfigService` de NestJS para gestión de variables de entorno
+
+**Protecciones:**
+- **Helmet:** Headers HTTP seguros (XSS, clickjacking, MIME sniffing)
+- **CORS:** Configurado via `CORS_ORIGIN`
+  - **Development:** `CORS_ORIGIN=*` (cualquier origen - solo para testing)
+  - **Production:** Usar dominio específico (ej: `https://mi-app.com`)
+- **Validación estricta:** DTOs con `class-validator` y `whitelist: true`
+
+---
+
+### 2. Rate Limiting ✅
+
+**Implementación actual (Challenge):**
+- Middleware in-memory funcional
+- Límite: 5 requests cada 30 segundos por IP
+- Bloqueo: 40 segundos al exceder límite
+- Rutas protegidas: GET endpoints de empresas/transferencias
+
+**Opciones para Producción:**
+
+**1. @nestjs/throttler con Redis**
+```typescript
+// app.module.ts
+import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nestjs/throttler-storage-redis';
+import Redis from 'ioredis';
+
+@Module({
+  imports: [
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 30000, limit: 5 }], // 5 req cada 30s
+      storage: new ThrottlerStorageRedisService(
+        new Redis({ host: 'localhost', port: 6379 })
+      ),
+    }),
+  ],
+})
+```
+**Ventajas:** Comparte estado entre instancias, headers automáticos (`X-RateLimit-Limit`, `X-RateLimit-Remaining`)
+
+**2. API Gateway:** AWS API Gateway, NGINX `limit_req_zone`, Cloudflare
+
+---
+
+### 3. Contratos y Errores (Swagger) ✅
+
+**Esquemas de error uniformes:**
+
+Formato estándar en todos los endpoints:
+
+```json
+{
+  "statusCode": 400,
+  "message": "CUIT must be 11 digits",
+  "error": "Bad Request",
+  "requestId": "uuid-v4-aqui"
+}
+```
+
+**Códigos documentados:** 400, 401, 404, 409, 429, 500
+
+**Implementación:** `src/common/dto/error-response.dto.ts`
+
+---
+
+### 4. Lambda (AWS - Diseño Funcional) ✅
+
+**Ubicación:** `src/lambda/` (excluida del build de NestJS)
+
+**Características:**
+- Función Lambda completa para adhesión de empresas
+- **Conexión a MongoDB** (misma base que NestJS, NO DynamoDB)
+- Autenticación Bearer Token
+- Validación de datos con manejo de errores
+
+**Variables de entorno parametrizadas:**
+
+`serverless.yml` configurado con:
+```yaml
+environment:
+  MONGODB_URI: ${env:MONGODB_URI}
+  AUTH_TOKEN: ${env:AUTH_TOKEN}
+  NODE_ENV: ${self:provider.stage}
+```
+
+**Reutilización de conexión MongoDB:**
+- Conexión cacheada a nivel de módulo (warm starts)
+- Handler reutiliza conexión existente si está disponible
+- Reduce latencia de 500-1000ms (cold) a 50-200ms (warm)
+
+**Idempotencia y reintentos:**
+- CUIT como clave natural de idempotencia
+- Reintentos automáticos (máximo 2) solo en errores 5xx/timeout
+- **Garantía:** Reintentos NO duplican registros (devuelve 409 Conflict)
+- Documentado en `src/lambda/README.md`
+
+**Despliegue:**
+```bash
+cd src/lambda/
+serverless deploy --stage dev
+```
+
+**Documentación completa:** `src/lambda/README.md`
+
+---
+
+### 5. Observabilidad ✅
+
+**Logging Interceptor:**
+- `requestId` único (UUID v4) en header `X-Request-Id`
+- Logs estructurados: `requestId`, `route`, `method`, `duration`, `status`, `ip`, `userAgent`
+
+**Exception Filter Global:**
+- Captura todas las excepciones
+- Diferencia entre errores 4xx (WARN) y 5xx (ERROR)
+
+**Ejemplo de log:**
+```json
+{
+  "requestId": "a1b2c3d4-uuid",
+  "route": "/companies/adhesion",
+  "method": "POST",
+  "duration": "45ms",
+  "status": 201
+}
+```
+
+**Archivos:** `src/common/filters/`, `src/common/interceptors/`
+
+---
+
+### 6. Tests & CI ✅
+
+**Cobertura de tests:**
+- **600+ tests** (unitarios, integración, E2E)
+- Servicios, DTOs, Schemas, Controladores, Middlewares, Filters, Interceptors
+- **Edge cases** para casos borde de fechas y timezones
+
+**Tests de Edge Cases:** `test/companies/companies-date-edge-cases.spec.ts`
+
+**Casos cubiertos:**
+- **Límites inclusivos:** Empresas dentro/fuera de "último mes" (rangos seguros)
+- **Cambio de mes:** Validación de transiciones entre meses
+- **Zona horaria UTC-3:** Cálculos respetan America/Buenos_Aires
+- **Transfers:** Validación de transferencias en bordes temporales
+
+**CI/CD Pipeline:** `.github/workflows/ci.yml`
+
+```
+Lint → Test Coverage → Build → E2E Tests (MongoDB)
+```
+
+**Características:**
+- GitHub Actions con workflow completo
+- MongoDB como servicio para tests E2E
+- **Coverage publicado en Codecov** automáticamente
+- Artifacts de build guardados
+- Ejecuta en: `push` a `main`/`develop` y `pull_request` a `main`
+
+**Comandos de tests:**
+```bash
+# Todos los tests
+npm test
+
+# Con cobertura
+npm run test:cov
+
+# E2E completos
+npm run test:e2e
+
+# Test específico
+npm test -- companies/companies.controller.spec
+
+# Watch mode
+npm run test:watch
+```
+
+---
+
 ## Estructura del Proyecto
 
 ```
 challenge/
 ├── src/
-│   ├── main.ts                    # Entry point + Swagger config
+│   ├── main.ts                    # Bootstrap + Swagger
 │   ├── app.module.ts              # Módulo raíz
-│   ├── common/                    # Recursos compartidos
-│   │   ├── types/                 # Enums y tipos
-│   │   ├── interfaces/            # Interfaces TypeScript
-│   │   ├── constants/             # Constantes (timezone)
-│   │   ├── utils/                 # Utilidades (date helper)
+│   ├── common/
+│   │   ├── constants/             # Timezone (UTC-3)
 │   │   ├── middleware/            # Auth + Rate limiting
-│   │   └── interceptors/          # Timezone interceptor
+│   │   ├── filters/               # Exception filter
+│   │   ├── interceptors/          # Logging interceptor
+│   │   ├── dto/                   # Error response DTO
+│   │   └── utils/                 # Date helper
 │   ├── companies/                 # Módulo Companies
 │   │   ├── controllers/
 │   │   ├── services/
 │   │   ├── dto/
-│   │   ├── schemas/
-│   │   └── companies.module.ts
+│   │   └── schemas/
 │   ├── transfers/                 # Módulo Transfers
 │   │   ├── controllers/
 │   │   ├── services/
 │   │   ├── dto/
-│   │   ├── schemas/
-│   │   └── transfers.module.ts
-│   ├── lambda/                    # AWS Lambda (punto adicional - excluida del build)
-│   │   ├── handler.ts
-│   │   ├── input-example.json
-│   │   ├── output-*.json
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   └── README.md
-│   └── database/
-│       └── seed.ts                # Script de datos de prueba
-├── test/                          # 647 tests
+│   │   └── schemas/
+│   └── lambda/                    # AWS Lambda (excluida del build)
+│       ├── handler.ts
+│       ├── serverless.yml
+│       ├── package.json
+│       └── README.md
+├── test/                          # 600+ tests
 │   ├── companies/
+│   │   ├── companies.controller.spec.ts
+│   │   ├── companies-date-edge-cases.spec.ts
+│   │   └── dto/, schemas/
 │   ├── transfers/
-│   ├── common/
-│   ├── app.module.spec.ts
-│   ├── main.spec.ts
+│   ├── common/                    # filters, interceptors, middleware
+│   ├── database/                  # seed validation
 │   └── README.md
-├── README.md                      # Este archivo
-└── package.json
+├── .github/
+│   └── workflows/
+│       └── ci.yml                 # GitHub Actions CI
+├── .env.example                   # Variables de entorno
+└── README.md
 ```
 
 ---
 
-## Instalación y Ejecución
+## Variables de Entorno
 
-### Prerrequisitos
-- **Node.js** v18 o superior
-- **MongoDB** instalar localmente.
+Archivo `.env.example`:
 
-### Pasos para ejecutar
+## Middlewares
 
-#### 1. Instalar dependencias
-```bash
-npm install
-```
+### Autenticación (Bearer Token)
+- Ruta protegida: `POST /companies/adhesion`
+- Header requerido: `Authorization: Bearer <token>`
+- Token configurado via `AUTH_TOKEN` en `.env`
 
-#### 2. Configurar variables de entorno
-```bash
-# Copiar el archivo de ejemplo
-cp .env.example .env
-
-# Editar .env con tus valores (o usar los valores por defecto)
-# MONGODB_URI=mongodb://localhost:27017/interbanking
-# AUTH_TOKEN=Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bD
-# PORT=3000
-# CORS_ORIGIN=*
-```
-
-#### 3. Iniciar MongoDB
-```bash
-mongod
-```
-
-#### 4. Poblar base de datos (Seed)
-```bash
-npm run seed
-```
-
-Este comando creará:
-- 20 empresas (12 antiguas, 8 del último mes)
-- Transferencias de prueba
-
-#### 5. Iniciar la aplicación
-```bash
-npm run start:dev
-```
-
-La API estará disponible en: **http://localhost:3000**
+### Rate Limiting
+- Rutas protegidas: GET `/companies/with-transfers/last-month` y `/companies/joined/last-month`
+- Límite: 5 requests / 30 segundos por IP
+- Bloqueo: 40 segundos al exceder
 
 ---
 
-## Documentación Interactiva - Swagger
+## Timezone
 
-La API incluye **Swagger/OpenAPI** para probar todos los endpoints de forma interactiva.
+**Configuración:** UTC-3 (America/Buenos_Aires)
 
-### Acceso a Swagger:
-```
-http://localhost:3000/api/docs
-```
+Todos los cálculos de "último mes" respetan la zona horaria de Argentina:
+- Fecha actual en UTC-3
+- Cálculo de rangos de fechas
+- Validación de adhesiones y transferencias
 
-### Características de la Documentación:
-- ✅ **Contratos completos**: Todos los endpoints documentados con ejemplos de request/response
-- ✅ **Esquemas de error uniformes**: Respuestas de error consistentes para todos los endpoints
-- ✅ **Ejemplos 4xx/5xx**: Múltiples ejemplos de errores (validación, autenticación, conflictos, rate limiting, errores del servidor)
-- ✅ **Formato estándar de error**:
-  ```json
-  {
-    "statusCode": 400,
-    "message": "Validation error message or array of messages",
-    "error": "Bad Request"
-  }
-  ```
-- ✅ **Try it out**: Autenticación Bearer integrada para probar endpoints protegidos
-- ✅ **Paginación documentada**: Parámetros `page` y `limit` con valores por defecto
-
-**Errores documentados:**
-- `400` Bad Request - Errores de validación
-- `401` Unauthorized - Autenticación faltante o inválida
-- `404` Not Found - Recurso no encontrado
-- `409` Conflict - Conflicto (ej: CUIT duplicado)
-- `429` Too Many Requests - Límite de rate limiting excedido
-- `500` Internal Server Error - Errores del servidor
+**Implementación:** `moment-timezone` con constante `TIMEZONE` en `src/common/constants/timezone.constant.ts`
 
 ---
 
-## 🔒 Seguridad
+## Autor
 
-### Autenticación
-- **Bearer Token**: Todas las rutas de adhesión requieren autenticación mediante token Bearer
-- Token configurado en variable de entorno `AUTH_TOKEN` (ver `.env.example`)
-- Formato: `Authorization: Bearer <token>`
-- **No hay tokens hardcodeados en el código** - todo se maneja mediante `process.env`
-
-### Protecciones Implementadas
-- ✅ **Helmet**: Headers HTTP seguros (XSS, clickjacking, MIME sniffing)
-- ✅ **CORS**: Control de orígenes permitidos (configurable via `CORS_ORIGIN`)
-- ✅ **Rate Limiting**: Protección contra sobrecarga (in-memory)
-  - 5 requests cada 30 segundos por IP
-  - Bloqueo de 40 segundos al exceder límite
-  - Rutas protegidas: GET `/companies/with-transfers/last-month` y `/companies/joined/last-month`
-- ✅ **Validación Estricta**: DTOs con `class-validator` y `whitelist: true`
-- ✅ **Paginación**: Límites en consultas GET para prevenir consultas pesadas
-
-### Rate Limiting - Producción
-
-**📌 Implementación Actual (Challenge):**
-
-El middleware in-memory actual es **correcto para el challenge**, pero tiene limitaciones en producción:
-- ✓ Simple y efectivo para desarrollo
-- ✗ No escala en clusters o múltiples instancias
-- ✗ Se pierde el estado en cada restart
-- ✗ **No expone headers de cuota** (`X-RateLimit-*`)
+**Luciano Mastrangelo**  
+Email: luciano.mastran@gmail.com  
+GitHub: [@luciannomas](https://github.com/luciannomas)
 
 ---
-
-**🚀 Opciones de Reemplazo para Producción:**
-
-#### Opción 1: `@nestjs/throttler` con Redis (Recomendado)
-
-```bash
-npm install @nestjs/throttler @nestjs/throttler-storage-redis ioredis
-```
-
-**Ventajas:**
-- ✓ **Comparte estado entre instancias** (cluster/múltiples servidores)
-- ✓ **Persistencia de límites** en Redis
-- ✓ **Headers de cuota automáticos**:
-  - `X-RateLimit-Limit`: Límite de requests permitidos
-  - `X-RateLimit-Remaining`: Requests restantes en ventana actual
-  - `X-RateLimit-Reset`: Timestamp de reinicio de ventana
-
-**Ejemplo de configuración:**
-```typescript
-// app.module.ts
-ThrottlerModule.forRoot([{
-  ttl: 30000,  // 30 segundos
-  limit: 5,    // 5 requests
-  storage: new ThrottlerStorageRedisService(new Redis({ /* config */ })),
-}])
-```
-
----
-
-#### Opción 2: API Gateway / Load Balancer
-
-**Alternativas de infraestructura:**
-- **AWS API Gateway**: Burst/rate limits nativos, sin código
-- **NGINX**: Módulo `limit_req_zone` para rate limiting
-- **Cloudflare**: Rate Limiting con reglas configurables
-
-**Ventaja:** Se maneja a nivel de infraestructura, sin cambios en el código
-
----
-
-## Tests
-
-El proyecto incluye **647 tests** que cubren:
-- Unit tests (servicios, DTOs, schemas, middlewares)
-- E2E tests (endpoints completos)
-- Integration tests (módulos)
-
-### Ejecutar tests
-```bash
-# Todos los tests
-npm test
-
-# Tests con cobertura
-npm run test:cov
-
-# Tests en modo watch
-npm run test:watch
-
-# Ejecutar tests de un archivo específico
-npm test -- ruta/al/archivo.spec
-
-# Ejemplos:
-npm test -- companies/companies.controller.spec
-npm test -- companies/companies.service.spec
-npm test -- transfers/transfers.service.spec
-npm test -- common/middleware/auth.middleware.spec
-```
-
-
-## Middlewares Implementados
-
-### Middleware de Autenticación
-- **Ruta protegida**: `POST /companies/adhesion`
-- **Propósito**: Validar que solo usuarios autorizados puedan registrar empresas
-- **Token**: Configurado via variable de entorno `AUTH_TOKEN`
-- **Header**: `Authorization: Bearer <token>`
-
-Este sistema de validación es común en operaciones sensibles como adhesión de empresas.
-
-**Configuración:**
-```bash
-# En .env
-AUTH_TOKEN=Bearer_mK7pL9xR4tN2wQ8vZ3jH6yF5sA1cE0bD
-```
-
-### Middleware de Rate Limiting
-- **Rutas protegidas**: 
-  - `GET /companies/with-transfers/last-month`
-  - `GET /companies/joined/last-month`
-- **Propósito**: Evitar sobrecarga del servidor por exceso de consultas
-- **Límite**: Máximo 5 requests cada 30 segundos por IP
-- **Bloqueo**: 40 segundos si se excede el límite
-- **Implementación**: In-memory (ver sección de Seguridad para opciones productivas)
-
----
-
-## Paginación
-
-Las rutas GET incluyen **paginación** para evitar consultas pesadas y mejorar el rendimiento:
-
-- **page**: Número de página (default: 1)
-- **limit**: Cantidad de resultados por página (default: 10, máximo: 100)
-- **total**: Total de registros en la base de datos
-- **totalPages**: Cantidad total de páginas
-
-**Ejemplo de uso:**
-```bash
-# Primera página, 10 resultados
-GET /companies/joined/last-month?page=1&limit=10
-
-# Segunda página, 20 resultados
-GET /companies/joined/last-month?page=2&limit=20
-```
-
----
-
-## Punto Adicional: AWS Lambda Function
-
-Este proyecto incluye una **Lambda Function de AWS** (diseño funcional completo) que replica la funcionalidad de adhesión de empresas en arquitectura serverless.
-
-**Ubicación:** `src/lambda/` (excluida del build de NestJS)
-
-### Características Principales
-
-**Funcionalidad:**
-- ✅ Validación de datos (CUIT, businessName, companyType, adhesionDate)
-- ✅ Autenticación Bearer Token (parametrizada via env vars)
-- ✅ Conexión a la misma base MongoDB que NestJS
-- ✅ Verificación de CUIT único con idempotencia garantizada
-- ✅ Manejo completo de errores con esquemas uniformes
-- ✅ CORS configurado
-
-**Optimizaciones:**
-- ⚡ **Reutilización de conexión MongoDB** (warm starts ~50-200ms vs cold starts ~500-1000ms)
-- ⚡ Caché de conexiones documentado y explicado
-- ⚡ Reserved concurrency para control de rate limiting
-
-**Despliegue:**
-- 📦 **`serverless.yml` completo** con configuración AWS
-- 📦 Variables de entorno parametrizadas (`MONGODB_URI`, `AUTH_TOKEN`)
-- 📦 CloudWatch Logs con retención de 14 días
-- 📦 Ready para `serverless deploy`
-
-**Idempotencia y Reintentos:**
-- ♻️ CUIT como clave natural de idempotencia
-- ♻️ Reintentos automáticos (máximo 2) solo en errores 5xx/timeout
-- ♻️ **Garantía**: Reintentos NO duplican registros (devuelve 409 Conflict)
-- ♻️ Estrategia documentada para errores transitorios
-
-### Arquitectura
-
-```
-Cliente → API Gateway → Lambda → MongoDB (misma base que NestJS)
-                          ↓
-                    CloudWatch Logs
-```
-
-**Flujos:**
-- `POST /adhesion` → API Gateway → Lambda → MongoDB
-- `GET /companies` → NestJS API → MongoDB (misma base)
-
-### Configuración de Variables de Entorno
-
-**En `serverless.yml`:**
-```yaml
-environment:
-  MONGODB_URI: ${env:MONGODB_URI}
-  AUTH_TOKEN: ${env:AUTH_TOKEN}
-```
-
-**Despliegue:**
-```bash
-# Desarrollo
-serverless deploy
-
-# Producción
-serverless deploy --stage prod
-
-# Testing local
-serverless offline start
-```
-
-### Documentación Completa
-
-```bash
-cd src/lambda/
-cat README.md
-```
-
-**Incluye:**
-- 📖 Input/output esperados (formato JSON)
-- 📖 Configuración de `serverless.yml`
-- 📖 Estrategia de reutilización de conexión MongoDB
-- 📖 Políticas de reintento e idempotencia
-- 📖 Ejemplos de casos de uso (cold/warm starts, reintentos, duplicados)
-
-La Lambda **no requiere despliegue** (es diseño funcional), pero está **lista para producción** con toda la configuración necesaria.
-
----
-
