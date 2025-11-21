@@ -16,7 +16,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
   // Security: Helmet middleware for secure HTTP headers
-  app.use(helmet());
+  app.use(helmet.default());
   
   // Security: Enable CORS with configuration
   app.enableCors({
